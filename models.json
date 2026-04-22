@@ -1,0 +1,32 @@
+{
+  "available_models": [
+    {
+      "id": "deepseek/deepseek-r1-0528-qwen3-8b",
+      "name": "DeepSeek R1 (Reasoning)",
+      "role": "critique",
+      "enabled": true,
+      "port": 1234
+    },
+    {
+      "id": "qwen/qwen3.5-9b",
+      "name": "Qwen 3.5 (Drafting)",
+      "role": "writer",
+      "enabled": true,
+      "port": 1234
+    },
+    {
+      "id": "google/gemma-4-e4b",
+      "name": "Gemma 4 (Polishing)",
+      "role": "editor",
+      "enabled": true,
+      "port": 1234
+    },
+    {
+      "id": "qwen2.5-coder-7b-instruct",
+      "name": "Qwen 2.5 Coder 7B (Formatting)",
+      "role": "formatter",
+      "enabled": true,
+      "port": 1234
+    }
+  ]
+}

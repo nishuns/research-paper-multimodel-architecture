@@ -1,0 +1,3 @@
+# Introduction
+
+Starting notes for research on The impact of Local LLMs on Developer Productivity...
