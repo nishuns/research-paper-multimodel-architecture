@@ -1,0 +1,20 @@
+{
+  "name": "research-engine-multimodel-architecture",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@lmstudio/sdk": "^1.5.0",
+    "axios": "^1.15.2",
+    "chalk": "^4.1.2",
+    "commander": "^14.0.3",
+    "dotenv": "^17.4.2",
+    "fs-extra": "^11.3.4"
+  }
+}
