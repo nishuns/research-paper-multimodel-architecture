@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "setup": "node index.js setup",
+    "suggest": "node index.js suggest",
+    "evolve": "node index.js evolve",
+    "test": "node test-vram.js",
+    "test:services": "node test-services.js"
   },
   "keywords": [],
   "author": "",
@@ -15,6 +19,9 @@
     "chalk": "^4.1.2",
     "commander": "^14.0.3",
     "dotenv": "^17.4.2",
-    "fs-extra": "^11.3.4"
+    "fs-extra": "^11.3.4",
+    "wikibase-sdk": "^11.3.1",
+    "youtube-search-api": "^2.0.1",
+    "zod": "^4.3.6"
   }
 }

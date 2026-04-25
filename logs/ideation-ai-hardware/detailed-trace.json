@@ -1,0 +1,20 @@
+[
+  {
+    "timestamp": "2026-04-25T18:25:56.058Z",
+    "type": "research_planning",
+    "role": "ideator",
+    "model": "qwen/qwen3.5-9b",
+    "prompt": "FIELD: \"AI hardware\"\n\nINSTRUCTION: Before providing any suggestions, you MUST use your tools (youtube_search, google_search) to identify what is currently trending in this field. \n\n1. Identify 3-5 specific search queries.\n2. Call the tools with these queries.\n3. DO NOT output the final list of suggestions until you have received and analyzed the tool results.",
+    "contextSnapshot": [
+      {
+        "role": "system",
+        "content": "You are a Trend Analyst and Ideation Specialist. Your goal is to suggest cutting-edge, impactful, and research-worthy topics across science, technology, society, and the arts."
+      },
+      {
+        "role": "user",
+        "content": "FIELD: \"AI hardware\"\n\nINSTRUCTION: Before providing any suggestions, you MUST use your tools (youtube_search, google_search) to identify what is currently trending in this field. \n\n1. Identify 3-5 specific search queries.\n2. Call the tools with these queries.\n3. DO NOT output the final list of suggestions until you have received and analyzed the tool results."
+      }
+    ],
+    "contextTokens": 135
+  }
+]
