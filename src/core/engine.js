@@ -10,80 +10,49 @@ const ContextManager = require('../utils/context-manager');
 const CONFIG_PATH = './paper.config.json';
 const MODELS_PATH = './models.json';
 
-async function handleManualToolCalls(model, context, toolsList, logger, metadata) {
-    let lastResponse = context.history[context.history.length - 1];
-    let iterations = 0;
-    const maxIterations = 8; // Allow for deeper research
+/**
+ * Modernized Tool Handler using model.act pattern.
+ * This replaces the previous manual tool calling loop.
+ */
+async function performAct(model, userPrompt, systemPrompt, toolsList, logger, metadata) {
+    console.log(chalk.cyan(`   🚀 [Act] Starting interaction with tools...`));
+    
+    let accumulatedContent = "";
 
-    while (iterations < maxIterations) {
-        if (!lastResponse.toolCalls || lastResponse.toolCalls.length === 0) {
-            break; 
-        }
-
-        iterations++;
-        const toolResults = [];
-
-        for (const toolCall of lastResponse.toolCalls) {
-            const toolDef = toolsList.find(t => t.name === toolCall.name);
-            if (toolDef) {
-                console.log(chalk.yellow(`   🛠️  [MANUAL TOOL CALL] ${toolCall.name}(${JSON.stringify(toolCall.parameters)})`));
-                try {
-                    const result = await toolDef.implementation(toolCall.parameters);
-                    console.log(chalk.green(`   ✅ [TOOL RESULT] Success.`));
-                    
-                    await logger.logStep({
-                        type: 'tool_execution',
-                        ...metadata,
-                        toolCall: { name: toolCall.name, parameters: toolCall.parameters },
-                        toolResult: result,
-                        contextTokens: context.totalTokens
-                    });
-
-                    toolResults.push({
-                        role: "tool",
-                        toolCallId: toolCall.id,
-                        content: result
-                    });
-                    context.addMessage('tool', result);
-                } catch (error) {
-                    console.log(chalk.red(`   ❌ [TOOL ERROR] ${error.message}`));
-                    
-                    await logger.logStep({
-                        type: 'tool_error',
-                        ...metadata,
-                        toolCall: { name: toolCall.name, parameters: toolCall.parameters },
-                        toolResult: `Error: ${error.message}`,
-                        contextTokens: context.totalTokens
-                    });
-
-                    toolResults.push({
-                        role: "tool",
-                        toolCallId: toolCall.id,
-                        content: `Error: ${error.message}`
-                    });
-                    context.addMessage('tool', `Error: ${error.message}`);
-                }
+    const response = await model.act(userPrompt, toolsList, {
+        systemPrompt: systemPrompt,
+        onMessage: (message) => {
+            const msgStr = message.toString();
+            if (msgStr.trim()) {
+                console.info(chalk.white(msgStr));
+                accumulatedContent += msgStr;
             }
-        }
+        },
+    });
 
-        const nextResponse = await model.respond(context.getHistory(), { tools: toolsList });
-        context.addMessage('assistant', nextResponse.content || "[Tool Calls]");
-        context.history[context.history.length - 1].toolCalls = nextResponse.toolCalls;
-        
-        await logger.logStep({
-            type: 'model_response',
-            ...metadata,
-            content: nextResponse.content,
-            toolCalls: nextResponse.toolCalls,
-            contextTokens: context.totalTokens
-        });
-
-        if (nextResponse.content) {
-            console.info(chalk.white(nextResponse.content));
-        }
-        
-        lastResponse = context.history[context.history.length - 1];
+    // Use accumulated content if response.content is empty
+    if (!response.content || response.content.length < accumulatedContent.length) {
+        response.content = accumulatedContent;
     }
+
+    if (!response.content && response.messages) {
+        // Final fallback: try to get content from messages
+        const lastAssistantMessage = [...response.messages].reverse().find(m => m.role === 'assistant' && m.content);
+        if (lastAssistantMessage) {
+            response.content = lastAssistantMessage.content;
+        }
+    }
+
+    // Log the final result and tool usage summary
+    await logger.logStep({
+        type: 'act_complete',
+        ...metadata,
+        content: response.content,
+        toolCalls: response.toolCalls,
+        predictionStatus: response.predictionStatus
+    });
+
+    return response;
 }
 
 async function analyzeTopic(topic) {
@@ -96,37 +65,14 @@ async function analyzeTopic(topic) {
     let model;
     try {
         model = await lmStudioService.loadModel(mCfg.id);
-        const context = new ContextManager();
         
         const systemPrompt = researchPrompts.ANALYZE_TOPIC_SYSTEM;
         const userPrompt = researchPrompts.ANALYZE_TOPIC_INSTRUCTION(topic);
         
-        context.addMessage('system', systemPrompt);
-        context.addMessage('user', userPrompt);
-
-        await logger.logStep({
-            type: 'input_prompt',
-            role: 'architect',
-            model: mCfg.id,
-            prompt: `${systemPrompt}\n\n${userPrompt}`,
-            contextSnapshot: context.getHistory(),
-            contextTokens: context.totalTokens
-        });
-
-        const response = await model.respond(context.getHistory());
+        // Setup phase now also uses tools for better architectural planning
+        const response = await performAct(model, userPrompt, systemPrompt, tools, logger, { role: 'architect', model: mCfg.id });
         const analysis = response.content;
         
-        context.addMessage('assistant', analysis);
-        console.info(chalk.white(analysis));
-
-        await logger.logStep({
-            type: 'model_output',
-            role: 'architect',
-            model: mCfg.id,
-            content: analysis,
-            contextTokens: context.totalTokens
-        });
-
         if (fs.existsSync(CONFIG_PATH)) {
             const paper = fs.readJsonSync(CONFIG_PATH);
             paper.roadmap = analysis;
@@ -140,78 +86,127 @@ async function analyzeTopic(topic) {
     }
 }
 
+const TOPIC_SCHEMA = {
+    type: "object",
+    properties: {
+        topics: {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    title: { type: "string" },
+                    explanation: { type: "string" },
+                    keywords: { type: "array", items: { type: "string" } }
+                },
+                required: ["title", "explanation", "keywords"]
+            }
+        }
+    },
+    required: ["topics"]
+};
+
 async function suggestTopics(field) {
     const config = fs.readJsonSync(MODELS_PATH);
     const mCfg = config.available_models.find(m => m.role === 'writer') || config.available_models[0];
+    const fCfg = config.available_models.find(m => m.role === 'formatter') || mCfg;
     const displayField = field || "General Trends";
     const logger = new ResearchLogger(`Ideation-${displayField}`);
 
     console.log(chalk.blue(`\n[Ideator] Researching trends for: ${displayField}...`));
     
     let model;
+    let rawContent;
     try {
         model = await lmStudioService.loadModel(mCfg.id);
-        const context = new ContextManager();
         
         const systemPrompt = researchPrompts.SUGGEST_TOPICS_SYSTEM;
-        const userPrompt = `FIELD: "${displayField}"\n\nINSTRUCTION: Before providing any suggestions, you MUST use your tools (youtube_search, google_search) to identify what is currently trending in this field. \n\n1. Identify 3-5 specific search queries.\n2. Call the tools with these queries.\n3. DO NOT output the final list of suggestions until you have received and analyzed the tool results.`;
+        const userPrompt = researchPrompts.SUGGEST_TOPICS_INSTRUCTION(field);
 
-        context.addMessage('system', systemPrompt);
-        context.addMessage('user', userPrompt);
-
-        await logger.logStep({
-            type: 'research_planning',
-            role: 'ideator',
-            model: mCfg.id,
-            prompt: userPrompt,
-            contextSnapshot: context.getHistory(),
-            contextTokens: context.totalTokens
-        });
-
-        const response = await model.respond(context.getHistory(), { tools });
-        context.addMessage('assistant', response.content || "[Tool Calls]");
-        context.history[context.history.length - 1].toolCalls = response.toolCalls;
-
-        await logger.logStep({
-            type: 'initial_response',
-            role: 'ideator',
-            model: mCfg.id,
-            content: response.content,
-            toolCalls: response.toolCalls,
-            contextTokens: context.totalTokens
-        });
-
-        if (response.content) console.info(chalk.white(response.content));
-
-        await handleManualToolCalls(model, context, tools, logger, { role: 'ideator', model: mCfg.id });
+        // Step 1: Use tools to gather information (Ideator)
+        const response = await performAct(model, userPrompt, systemPrompt, tools, logger, { role: 'ideator', model: mCfg.id });
+        rawContent = response.content;
         
-        if (context.history[context.history.length - 1].role !== 'assistant' || !context.history[context.history.length - 1].content || context.history[context.history.length - 1].content === "[Tool Calls]") {
-            console.log(chalk.dim(`[Ideator] Requesting final synthesis based on research...`));
-            const finalPrompt = "Based on the research results above, provide the final 5-10 research topic suggestions as originally instructed (Title, Explanation, Keywords).";
-            context.addMessage('user', finalPrompt);
-            
-            const finalResponse = await model.respond(context.getHistory());
-            context.addMessage('assistant', finalResponse.content);
-            console.info(chalk.white(finalResponse.content));
-            
-            await logger.logStep({
-                type: 'final_synthesis',
-                role: 'ideator',
-                model: mCfg.id,
-                content: finalResponse.content,
-                contextTokens: context.totalTokens
-            });
+        if (!rawContent && response.messages) {
+            const lastMsg = response.messages.filter(m => m.role === 'assistant').pop();
+            rawContent = lastMsg ? lastMsg.content : null;
         }
 
-        const suggestions = context.history.filter(m => m.role === 'assistant' && m.content && m.content !== "[Tool Calls]").map(m => m.content).pop();
-        
-        console.log(chalk.white(`\n--- TREND-BASED TOPIC SUGGESTIONS ---\n`));
-        console.log(chalk.cyan(suggestions || "No suggestions generated. Check logs."));
-        console.log(chalk.white(`\n--------------------------------------\n`));
-        
-        return suggestions;
+        console.log(chalk.dim(`   (Raw ideation content captured, length: ${rawContent ? rawContent.length : 0})`));
     } finally {
         if (model) await lmStudioService.unloadModel(model);
+    }
+
+    if (!rawContent) {
+        console.log(chalk.red("❌ No raw content generated for suggestions."));
+        return [];
+    }
+
+    // Step 2: Use structured output with the formatter model
+    console.log(chalk.cyan(`\n   ✨ Loading Formatter (${fCfg.name}) to generate JSON...`));
+    let formatterModel;
+    try {
+        formatterModel = await lmStudioService.loadModel(fCfg.id);
+        
+        const structuredResponse = await formatterModel.respond(
+            `Extract the research topics from the following text into the required JSON format:\n\n${rawContent}`, 
+            {
+                systemPrompt: "You are a JSON formatter. You MUST output ONLY valid JSON. NO talk, NO markdown blocks, NO explanations. Just the JSON object matching the provided schema.",
+                structured: {
+                    type: "json",
+                    jsonSchema: TOPIC_SCHEMA
+                }
+            }
+        );
+
+        let content = structuredResponse.content.trim();
+        console.log(chalk.dim(`   (Formatter output captured, length: ${content.length})`));
+
+        // Extremely robust JSON extraction
+        let data;
+        try {
+            // Try direct parse
+            data = JSON.parse(content);
+        } catch (e) {
+            // Try stripping markdown blocks
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                try {
+                    data = JSON.parse(jsonMatch[0]);
+                } catch (e2) {
+                    throw new Error("Failed to parse extracted JSON.");
+                }
+            } else {
+                throw new Error("No JSON structure found in response.");
+            }
+        }
+
+        const titles = data.topics.map(t => t.title);
+        
+        if (titles.length > 0) {
+            const suggestionsPath = './suggestions.json';
+            let existingSuggestions = [];
+            if (fs.existsSync(suggestionsPath)) {
+                existingSuggestions = fs.readJsonSync(suggestionsPath);
+            }
+            const updatedSuggestions = Array.from(new Set([...existingSuggestions, ...titles]));
+            fs.writeJsonSync(suggestionsPath, updatedSuggestions, { spaces: 2 });
+            console.log(chalk.green(`\n✅ ${titles.length} topics saved to suggestions.json`));
+        }
+
+        console.log(chalk.white(`\n--- TOPIC SUGGESTIONS ---\n`));
+        data.topics.forEach((t, i) => {
+            console.log(chalk.cyan(`${i + 1}. **${t.title}**`));
+            console.log(chalk.white(`   ${t.explanation}`));
+            console.log(chalk.dim(`   Keywords: ${t.keywords.join(', ')}\n`));
+        });
+        console.log(chalk.white(`--------------------------\n`));
+        
+        return data.topics;
+    } catch (err) {
+        console.log(chalk.red(`❌ Formatting Error: ${err.message}`));
+        return [];
+    } finally {
+        if (formatterModel) await lmStudioService.unloadModel(formatterModel);
     }
 }
 
@@ -228,71 +223,26 @@ async function runPhase(content, contextData, roleName, cycleNum = 1) {
     let model;
     try {
         model = await lmStudioService.loadModel(mCfg.id);
-        const context = new ContextManager();
         
         const systemPrompt = researchPrompts.EVOLVE_SYSTEM(paper.topic, roadmap);
         const userPrompt = researchPrompts.EVOLVE_INSTRUCTION(paper.topic, contextData) + `\n\nCURRENT CONTENT:\n${content}`;
 
-        context.addMessage('system', systemPrompt);
-        context.addMessage('user', userPrompt);
-
         console.log(chalk.cyan(`[Agent] ${roleName} is working (Cycle ${cycleNum})...`));
         
-        await logger.logStep({
-            type: 'phase_start',
-            role: roleName,
-            model: mCfg.id,
-            cycle: cycleNum,
-            prompt: userPrompt,
-            contextSnapshot: context.getHistory(),
-            contextTokens: context.totalTokens
+        const response = await performAct(model, userPrompt, systemPrompt, tools, logger, { 
+            role: roleName, 
+            model: mCfg.id, 
+            cycle: cycleNum 
         });
 
-        const response = await model.respond(context.getHistory(), { tools });
-        context.addMessage('assistant', response.content || "[Tool Calls]");
-        context.history[context.history.length - 1].toolCalls = response.toolCalls;
-
-        await logger.logStep({
-            type: 'model_initial_response',
-            role: roleName,
-            model: mCfg.id,
-            cycle: cycleNum,
-            content: response.content,
-            toolCalls: response.toolCalls,
-            contextTokens: context.totalTokens
-        });
-
-        if (response.content) console.info(chalk.white(response.content));
-
-        await handleManualToolCalls(model, context, tools, logger, { role: roleName, model: mCfg.id, cycle: cycleNum });
-
-        let finalResult = context.history[context.history.length - 1].content;
-        if (context.history[context.history.length - 1].role === 'tool' || finalResult === "[Tool Calls]") {
-             const finalResponse = await model.respond(context.getHistory());
-             finalResult = finalResponse.content;
-             context.addMessage('assistant', finalResult);
-             console.info(chalk.white(finalResult));
-        }
-
-        if (context.isFull()) {
-            const summary = await context.summarize(model);
-            await logger.logStep({
-                type: 'context_summarization',
-                role: roleName,
-                model: mCfg.id,
-                cycle: cycleNum,
-                content: summary,
-                contextTokens: context.totalTokens
-            });
-        }
+        const finalResult = response.content;
 
         await logger.logStep({
             type: 'phase_complete',
             role: roleName,
             model: mCfg.id,
             cycle: cycleNum,
-            finalContent: finalResult,
-            contextTokens: context.totalTokens
+            finalContent: finalResult
         });
 
         return {

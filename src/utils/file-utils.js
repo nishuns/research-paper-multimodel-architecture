@@ -39,11 +39,18 @@ async function createIntroIfMissing(topic) {
     }
 }
 
+async function saveChapter(chapter, content) {
+    const filePath = path.join('./chapters', `${chapter}.md`);
+    await fs.writeFile(filePath, content);
+    return filePath;
+}
+
 module.exports = {
     ensureProjectDirs,
     writeConfig,
     configExists,
     readChapter,
+    saveChapter,
     saveDraft,
     createIntroIfMissing
 };

@@ -21,7 +21,9 @@ Despite the benefits of local deployment, current research often overlooks its i
 ## 2. Theoretical Framework: Operationalizing Productivity
 To measure productivity accurately, we define $P(\text{Task})$ as follows:
 
+```
 $$ P(\text{Task}) = \alpha \cdot T_{\text{raw}} - \beta \cdot C_{\text{load}} - \gamma \cdot O_{\text{QA}} + R $$
+```
 
 Where:
 *   $\mathbf{T_{raw}}$: The computational speed of the model.
@@ -45,7 +47,7 @@ $\mathbf{C_{load}}$ represents the cognitive effort needed to maintain task cohe
 ### 2.3 Quality Assurance Overhead ($\mathbf{O_{QA}}$)
 This metric captures the time spent correcting errors:
 
-$$ O_{\text{QA}} = T_{\text{Hallucination Correction}} + T_{\text{Logical Error Debugging}} $$
+```$$ O_{\text{QA}} = T_{\text{Hallucination Correction}} + T_{\text{Logical Error Debugging}} $$```
 
 Local models with aggressive quantization or limited memory often exhibit higher error rates, increasing $O_{\text{QA}}$.
 

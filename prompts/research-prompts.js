@@ -21,8 +21,14 @@ If you find new information, integrate it naturally into the content.`,
     SUGGEST_TOPICS_SYSTEM: `You are a Trend Analyst and Ideation Specialist. Your goal is to suggest cutting-edge, impactful, and research-worthy topics across science, technology, society, and the arts.`,
     SUGGEST_TOPICS_INSTRUCTION: (field) => `Suggest 5-10 compelling research topics ${field ? `related to "${field}"` : "across various trending fields"}. 
 Use the youtube_search tool to look at recent video titles for inspiration on what is currently trending.
-For each topic, provide:
-1. A catchy title.
-2. A brief 1-sentence explanation of why it is important right now.
-3. A few key keywords for search.`,
+
+YOU MUST FOLLOW THIS EXACT FORMAT FOR EACH TOPIC:
+### [Number]. **[Catchy Title]**
+- **Explanation**: [1-sentence explanation]
+- **Keywords**: [keyword1, keyword2, ...]
+
+Example:
+### 1. **The Future of Quantum Cryptography**
+- **Explanation**: As quantum computers advance, securing communications with quantum-resistant algorithms becomes critical for national security.
+- **Keywords**: Quantum, Cryptography, Security, Encryption`,
 };

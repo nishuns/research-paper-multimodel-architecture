@@ -1,5 +1,8 @@
 const { Command } = require('commander');
 const chalk = require('chalk');
+const inquirer = require('inquirer');
+const fs = require('fs-extra');
+const path = require('path');
 const fileUtils = require('./src/utils/file-utils');
 const { runPhase, analyzeTopic, suggestTopics } = require('./src/core/engine');
 
@@ -17,32 +20,99 @@ program
 
 // COMMAND: Setup (Initializes the project, log, and analysis)
 program
-    .command('setup <topic>')
+    .command('setup [topic]')
     .description('Initialize project with a topic and architectural analysis')
     .action(async (topic) => {
+        let selectedTopic = topic;
+
+        if (!selectedTopic) {
+            const suggestionsPath = './suggestions.json';
+            let choices = [];
+            if (fs.existsSync(suggestionsPath)) {
+                choices = fs.readJsonSync(suggestionsPath);
+            }
+            choices.push(new inquirer.Separator());
+            choices.push('Other (Enter manually)');
+
+            const answers = await inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'topicChoice',
+                    message: 'Select a research topic from suggestions:',
+                    choices: choices
+                },
+                {
+                    type: 'input',
+                    name: 'manualTopic',
+                    message: 'Enter your custom research topic:',
+                    when: (answers) => answers.topicChoice === 'Other (Enter manually)',
+                    validate: (input) => input.trim().length > 0 || 'Topic cannot be empty'
+                }
+            ]);
+
+            selectedTopic = answers.topicChoice === 'Other (Enter manually)' ? answers.manualTopic : answers.topicChoice;
+        }
+
         await fileUtils.ensureProjectDirs();
-        await fileUtils.writeConfig(topic);
-        await fileUtils.createIntroIfMissing(topic);
+        await fileUtils.writeConfig(selectedTopic);
+        await fileUtils.createIntroIfMissing(selectedTopic);
         
-        console.log(chalk.green.bold(`\n✅ Project Configured for: ${topic}`));
+        console.log(chalk.green.bold(`\n✅ Project Configured for: ${selectedTopic}`));
         
         // New: Architectural Analysis
-        await analyzeTopic(topic);
+        await analyzeTopic(selectedTopic);
     });
 
 // COMMAND: Evolve (The main pipeline)
 program
-    .command('evolve <chapter>')
+    .command('evolve [chapter]')
     .description('Run the full evolution pipeline')
-    .option('-e, --count <number>', 'Number of evolution cycles', 1)
+    .option('-e, --count <number>', 'Number of evolution cycles')
     .action(async (chapter, options) => {
         if (!fileUtils.configExists()) {
             return console.log(chalk.red("Run setup first!"));
         }
 
-        let currentContent = await fileUtils.readChapter(chapter);
+        let selectedChapter = chapter;
+        let count = options.count;
 
-        for (let i = 1; i <= options.count; i++) {
+        if (!selectedChapter) {
+            const chaptersDir = './chapters';
+            if (!fs.existsSync(chaptersDir)) {
+                return console.log(chalk.red("No chapters found. Run setup first!"));
+            }
+            const files = fs.readdirSync(chaptersDir).filter(f => f.endsWith('.md'));
+            if (files.length === 0) {
+                return console.log(chalk.red("No chapter files found in ./chapters/"));
+            }
+
+            const answers = await inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'chapter',
+                    message: 'Select a chapter to evolve:',
+                    choices: files.map(f => f.replace('.md', ''))
+                }
+            ]);
+            selectedChapter = answers.chapter;
+        }
+
+        if (!count) {
+            const answers = await inquirer.prompt([
+                {
+                    type: 'input',
+                    name: 'count',
+                    message: 'How many evolution cycles?',
+                    default: 1,
+                    validate: (input) => !isNaN(parseInt(input)) || 'Please enter a number'
+                }
+            ]);
+            count = parseInt(answers.count);
+        }
+
+        let currentContent = await fileUtils.readChapter(selectedChapter);
+
+        for (let i = 1; i <= count; i++) {
             console.log(chalk.magenta.bold(`\n================ CYCLE ${i} ================`));
 
             // PHASE 1: CRITIQUE
@@ -61,11 +131,15 @@ program
             currentContent = p4.content;
 
             // Save Snapshot
-            const savePath = await fileUtils.saveDraft(chapter, i, currentContent);
+            const savePath = await fileUtils.saveDraft(selectedChapter, i, currentContent);
             console.log(chalk.green.bold(`\n✔ Cycle ${i} saved to ${savePath}`));
         }
 
-        console.log(chalk.cyan.bold(`\n✨ Evolution complete for ${chapter}.\n`));
+        // Save final content back to the main chapter file
+        await fileUtils.saveChapter(selectedChapter, currentContent);
+        console.log(chalk.green.bold(`\n✅ Final version of ${selectedChapter} published to chapters/${selectedChapter}.md`));
+
+        console.log(chalk.cyan.bold(`\n✨ Evolution complete for ${selectedChapter}.\n`));
     });
 
 program.parse(process.argv);
