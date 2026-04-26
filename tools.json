@@ -1,0 +1,28 @@
+{
+  "available_tools": [
+    {
+      "name": "google_search",
+      "enabled": false
+    },
+    {
+      "name": "youtube_search",
+      "enabled": true
+    },
+    {
+      "name": "wikipedia_search",
+      "enabled": true
+    },
+    {
+      "name": "read_chapter",
+      "enabled": true
+    },
+    {
+      "name": "write_chapter",
+      "enabled": true
+    },
+    {
+      "name": "create_file",
+      "enabled": true
+    }
+  ]
+}

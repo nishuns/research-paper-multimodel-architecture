@@ -4,7 +4,7 @@ const inquirer = require('inquirer');
 const fs = require('fs-extra');
 const path = require('path');
 const fileUtils = require('./src/utils/file-utils');
-const { runPhase, analyzeTopic, suggestTopics } = require('./src/core/engine');
+const { runPhase, analyzeTopic, suggestTopics, publishPaper } = require('./src/core/engine');
 
 const program = new Command();
 
@@ -17,6 +17,39 @@ program
     .action(async (field) => {
         await suggestTopics(field);
     });
+
+async function runEvolution(selectedChapter, count) {
+    let currentContent = await fileUtils.readChapter(selectedChapter);
+
+    for (let i = 1; i <= count; i++) {
+        console.log(chalk.magenta.bold(`\n================ CYCLE ${i} ================`));
+
+        // PHASE 1: CRITIQUE
+        const p1 = await runPhase(currentContent, null, 'critique', i);
+
+        // PHASE 2: WRITER
+        const p2 = await runPhase(currentContent, p1.resultText, 'writer', i);
+        currentContent = p2.content;
+
+        // PHASE 3: EDITOR
+        const p3 = await runPhase(currentContent, null, 'editor', i);
+        currentContent = p3.content;
+
+        // PHASE 4: FORMATTER
+        const p4 = await runPhase(currentContent, null, 'formatter', i);
+        currentContent = p4.content;
+
+        // Save Snapshot
+        const savePath = await fileUtils.saveDraft(selectedChapter, i, currentContent);
+        console.log(chalk.green.bold(`\n✔ Cycle ${i} saved to ${savePath}`));
+    }
+
+    // Save final content back to the main chapter file
+    await fileUtils.saveChapter(selectedChapter, currentContent);
+    console.log(chalk.green.bold(`\n✅ Final version of ${selectedChapter} saved to chapters/${selectedChapter}.md`));
+
+    console.log(chalk.cyan.bold(`\n✨ Evolution complete for ${selectedChapter}.\n`));
+}
 
 // COMMAND: Setup (Initializes the project, log, and analysis)
 program
@@ -55,12 +88,16 @@ program
 
         await fileUtils.ensureProjectDirs();
         await fileUtils.writeConfig(selectedTopic);
-        await fileUtils.createIntroIfMissing(selectedTopic);
+        const chapterFilename = await fileUtils.createInitialChapter(selectedTopic);
         
         console.log(chalk.green.bold(`\n✅ Project Configured for: ${selectedTopic}`));
         
-        // New: Architectural Analysis
+        // Architectural Analysis
         await analyzeTopic(selectedTopic);
+
+        // AUTO-START: Start evolving the initial chapter immediately
+        console.log(chalk.yellow.bold(`\n🚀 Starting initial evolution for: ${chapterFilename}.md`));
+        await runEvolution(chapterFilename, 1);
     });
 
 // COMMAND: Evolve (The main pipeline)
@@ -110,36 +147,52 @@ program
             count = parseInt(answers.count);
         }
 
-        let currentContent = await fileUtils.readChapter(selectedChapter);
+        await runEvolution(selectedChapter, count);
+    });
 
-        for (let i = 1; i <= count; i++) {
-            console.log(chalk.magenta.bold(`\n================ CYCLE ${i} ================`));
-
-            // PHASE 1: CRITIQUE
-            const p1 = await runPhase(currentContent, null, 'critique', i);
-
-            // PHASE 2: WRITER
-            const p2 = await runPhase(currentContent, p1.resultText, 'writer', i);
-            currentContent = p2.content;
-
-            // PHASE 3: EDITOR
-            const p3 = await runPhase(currentContent, null, 'editor', i);
-            currentContent = p3.content;
-
-            // PHASE 4: FORMATTER
-            const p4 = await runPhase(currentContent, null, 'formatter', i);
-            currentContent = p4.content;
-
-            // Save Snapshot
-            const savePath = await fileUtils.saveDraft(selectedChapter, i, currentContent);
-            console.log(chalk.green.bold(`\n✔ Cycle ${i} saved to ${savePath}`));
+// COMMAND: Publish (Final Formatting and Export)
+program
+    .command('publish [chapter]')
+    .description('Finalize and format the paper for publication')
+    .action(async (chapter) => {
+        if (!fileUtils.configExists()) {
+            return console.log(chalk.red("Run setup first!"));
         }
 
-        // Save final content back to the main chapter file
-        await fileUtils.saveChapter(selectedChapter, currentContent);
-        console.log(chalk.green.bold(`\n✅ Final version of ${selectedChapter} published to chapters/${selectedChapter}.md`));
+        let selectedChapter = chapter;
 
-        console.log(chalk.cyan.bold(`\n✨ Evolution complete for ${selectedChapter}.\n`));
+        if (!selectedChapter) {
+            const chaptersDir = './chapters';
+            if (!fs.existsSync(chaptersDir)) {
+                return console.log(chalk.red("No chapters found. Run setup first!"));
+            }
+            const files = fs.readdirSync(chaptersDir).filter(f => f.endsWith('.md'));
+            if (files.length === 0) {
+                return console.log(chalk.red("No chapter files found in ./chapters/"));
+            }
+
+            const answers = await inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'chapter',
+                    message: 'Select a chapter to publish:',
+                    choices: files.map(f => f.replace('.md', ''))
+                }
+            ]);
+            selectedChapter = answers.chapter;
+        }
+
+        console.log(chalk.blue(`\n[Publisher] Preparing ${selectedChapter} for final publication...`));
+        
+        let content = await fileUtils.readChapter(selectedChapter);
+        
+        const publishedContent = await publishPaper(content);
+        
+        const filename = `${selectedChapter}_final.md`;
+        const publishPath = await fileUtils.savePublished(filename, publishedContent);
+
+        console.log(chalk.green.bold(`\n✅ ${selectedChapter} has been published to ${publishPath}`));
+        console.log(chalk.cyan(`   Size, formatting, code, and formulas have been professionally styled.`));
     });
 
 program.parse(process.argv);

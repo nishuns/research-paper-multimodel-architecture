@@ -27,6 +27,34 @@
       "role": "formatter",
       "enabled": true,
       "port": 1234
+    },
+    {
+      "id": "qwen2.5-coder-7b-instruct",
+      "name": "Qwen 2.5 Coder 7B (Publishing)",
+      "role": "publisher",
+      "enabled": true,
+      "port": 1234
+    },
+    {
+      "id": "nvidia/nemotron-3-nano-4b",
+      "name": "Nemotron-3 Nano 4B (Analysis)",
+      "role": "analyst",
+      "enabled": true,
+      "port": 1234
+    },
+    {
+      "id": "openai/gpt-oss-20b",
+      "name": "GPT-OSS 20B",
+      "role": "researcher",
+      "enabled": false,
+      "port": 1234
+    },
+    {
+      "id": "zai-org/glm-4.6v-flash",
+      "name": "GLM-4.6V Flash",
+      "role": "vision-analyst",
+      "enabled": false,
+      "port": 1234
     }
   ]
 }

@@ -6,6 +6,7 @@ const CONFIG_PATH = './paper.config.json';
 async function ensureProjectDirs() {
     await fs.ensureDir('./chapters');
     await fs.ensureDir('./drafts');
+    await fs.ensureDir('./publish');
 }
 
 async function writeConfig(topic) {
@@ -31,16 +32,34 @@ async function saveDraft(chapter, cycle, content) {
     return savePath;
 }
 
-async function createIntroIfMissing(topic) {
-    const introPath = './chapters/intro.md';
-    if (!fs.existsSync(introPath)) {
-        const starter = `# Introduction\n\nTopic: ${topic}\n\n[AI: Please generate the initial research introduction based on the topic above.]`;
-        await fs.writeFile(introPath, starter);
+function slugify(text) {
+    return text.toString().toLowerCase()
+        .replace(/\s+/g, '-')           // Replace spaces with -
+        .replace(/[^\w\-]+/g, '')       // Remove all non-word chars
+        .replace(/\-\-+/g, '-')         // Replace multiple - with single -
+        .replace(/^-+/, '')             // Trim - from start of text
+        .replace(/-+$/, '');            // Trim - from end of text
+}
+
+async function createInitialChapter(topic) {
+    const slug = slugify(topic) || 'research-paper';
+    const filePath = path.join('./chapters', `${slug}.md`);
+    if (!fs.existsSync(filePath)) {
+        const starter = `# ${topic}\n\n[AI: Please generate the comprehensive research paper introduction and preliminary outline for: ${topic}]`;
+        await fs.writeFile(filePath, starter);
     }
+    return slug;
 }
 
 async function saveChapter(chapter, content) {
     const filePath = path.join('./chapters', `${chapter}.md`);
+    await fs.writeFile(filePath, content);
+    return filePath;
+}
+
+async function savePublished(filename, content) {
+    const filePath = path.join('./publish', filename);
+    await fs.ensureDir('./publish');
     await fs.writeFile(filePath, content);
     return filePath;
 }
@@ -52,5 +71,6 @@ module.exports = {
     readChapter,
     saveChapter,
     saveDraft,
-    createIntroIfMissing
+    createInitialChapter,
+    savePublished
 };

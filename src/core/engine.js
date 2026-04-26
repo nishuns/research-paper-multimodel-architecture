@@ -254,4 +254,42 @@ async function runPhase(content, contextData, roleName, cycleNum = 1) {
     }
 }
 
-module.exports = { runPhase, analyzeTopic, suggestTopics };
+async function publishPaper(content) {
+    const config = fs.readJsonSync(MODELS_PATH);
+    const mCfg = config.available_models.find(m => m.role === 'publisher') || config.available_models.find(m => m.role === 'formatter');
+
+    if (!mCfg || !mCfg.enabled) return content;
+
+    const paper = fs.existsSync(CONFIG_PATH) ? fs.readJsonSync(CONFIG_PATH) : { topic: "Unknown" };
+    const logger = new ResearchLogger(paper.topic);
+
+    let model;
+    try {
+        model = await lmStudioService.loadModel(mCfg.id);
+        
+        const systemPrompt = researchPrompts.PUBLISH_SYSTEM(paper.topic);
+        const userPrompt = researchPrompts.PUBLISH_INSTRUCTION(content);
+
+        console.log(chalk.cyan(`[Publisher] Finalizing research paper format...`));
+        
+        // Using respond instead of performAct for final formatting to avoid tool calls and keep it clean
+        const response = await model.respond(userPrompt, {
+            systemPrompt: systemPrompt
+        });
+
+        const finalResult = response.content;
+
+        await logger.logStep({
+            type: 'publish_complete',
+            role: 'publisher',
+            model: mCfg.id,
+            finalContent: finalResult
+        });
+
+        return finalResult;
+    } finally {
+        if (model) await lmStudioService.unloadModel(model);
+    }
+}
+
+module.exports = { runPhase, analyzeTopic, suggestTopics, publishPaper };

@@ -31,4 +31,13 @@ Example:
 ### 1. **The Future of Quantum Cryptography**
 - **Explanation**: As quantum computers advance, securing communications with quantum-resistant algorithms becomes critical for national security.
 - **Keywords**: Quantum, Cryptography, Security, Encryption`,
+
+    PUBLISH_SYSTEM: (topic) => `You are a Professional Academic Publisher. Your task is to finalize the research paper on: "${topic}". 
+You must ensure the paper adheres to high academic standards, with properly formatted code blocks, LaTeX formulas, and a clear, professional structure.`,
+    PUBLISH_INSTRUCTION: (content) => `Finalize and format the following research content into a professional paper. 
+Use LaTeX for all mathematical formulas and ensure all code snippets are correctly formatted in markdown code blocks. 
+Make sure the layout feels like a formal research paper with sections like Abstract, Introduction, and Conclusion.
+
+CONTENT TO PUBLISH:
+${content}`,
 };

@@ -125,7 +125,7 @@ const createFileTool = rawFunctionTool({
     },
 });
 
-module.exports = [
+const allTools = [
     googleSearchTool,
     youtubeSearchTool,
     wikipediaSearchTool,
@@ -133,3 +133,28 @@ module.exports = [
     writeChapterTool,
     createFileTool
 ];
+
+// Load tool configuration
+const TOOLS_CONFIG_PATH = path.join(__dirname, '../../tools.json');
+let enabledTools = allTools;
+
+try {
+    if (fs.existsSync(TOOLS_CONFIG_PATH)) {
+        const config = fs.readJsonSync(TOOLS_CONFIG_PATH);
+        const toolSettings = config.available_tools || [];
+        
+        enabledTools = allTools.filter(tool => {
+            const setting = toolSettings.find(s => s.name === tool.name);
+            return setting ? setting.enabled !== false : true; // Default to true if not found
+        });
+        
+        const disabledCount = allTools.length - enabledTools.length;
+        if (disabledCount > 0) {
+            console.log(`\n[System] ${disabledCount} tools are disabled via tools.json`);
+        }
+    }
+} catch (error) {
+    console.error(`Error loading tool configuration: ${error.message}`);
+}
+
+module.exports = enabledTools;
