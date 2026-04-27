@@ -15,7 +15,39 @@ program
     .command('suggest [field]')
     .description('Suggest compelling research topics')
     .action(async (field) => {
-        await suggestTopics(field);
+        let selectedField = field;
+        const suggestionsPath = './suggestions.json';
+        const hasExisting = fs.existsSync(suggestionsPath);
+
+        const answers = await inquirer.prompt([
+            {
+                type: 'list',
+                name: 'mode',
+                message: 'Manage Suggestions:',
+                choices: [
+                    { name: 'Append to existing suggestions', value: 'append' },
+                    { name: 'Clear all and start new list', value: 'new' }
+                ],
+                when: () => hasExisting
+            },
+            {
+                type: 'input',
+                name: 'field',
+                message: 'Describe the research field or topic for suggestions:',
+                default: selectedField || 'General Trends',
+                when: (answers) => !selectedField || answers.mode
+            }
+        ]);
+
+        const mode = answers.mode || 'new';
+        selectedField = answers.field || selectedField || 'General Trends';
+
+        if (mode === 'new' && hasExisting) {
+            await fs.remove(suggestionsPath);
+            console.log(chalk.yellow('🗑  Existing suggestions cleared.'));
+        }
+
+        await suggestTopics(selectedField);
     });
 
 // COMMAND: Setup (Initializes the project, log, and analysis)
